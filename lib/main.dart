@@ -18,7 +18,7 @@ class MainApp extends StatelessWidget {
         title: 'Tasky',
         theme: ThemeData(
           useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6B1631)),
         ),
         home: const TaskScreen(),
       ),
