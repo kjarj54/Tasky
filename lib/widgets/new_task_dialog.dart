@@ -1,20 +1,36 @@
 import 'package:flutter/material.dart';
 
 class NewTaskDialog extends StatefulWidget {
-  const NewTaskDialog({super.key});
+  final String? initialValue;
+  final String title;
+
+  const NewTaskDialog({
+    super.key, 
+    this.initialValue,
+    this.title = 'Nueva Tarea',
+  });
 
   @override
   State<NewTaskDialog> createState() => _NewTaskDialogState();
 }
 
 class _NewTaskDialogState extends State<NewTaskDialog> {
-  final _controller = TextEditingController();
+  late final TextEditingController _controller;
   String? _errorText;
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+    if (widget.initialValue != null) {
+      _validateInput(widget.initialValue!);
+    }
   }
 
   void _validateInput(String value) {

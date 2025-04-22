@@ -125,8 +125,7 @@ class TaskList extends StatelessWidget {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('Error: ${error.toString()}'),
-                              backgroundColor:
-                                  Theme.of(context).colorScheme.error,
+                              backgroundColor: Theme.of(context).colorScheme.error,
                             ),
                           );
                         });
@@ -136,8 +135,17 @@ class TaskList extends StatelessWidget {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('Error: ${error.toString()}'),
-                              backgroundColor:
-                                  Theme.of(context).colorScheme.error,
+                              backgroundColor: Theme.of(context).colorScheme.error,
+                            ),
+                          );
+                        });
+                      },
+                      onEdit: (newTitle) {
+                        taskProvider.editTask(task.id, newTitle).catchError((error) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error: ${error.toString()}'),
+                              backgroundColor: Theme.of(context).colorScheme.error,
                             ),
                           );
                         });

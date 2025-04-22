@@ -96,6 +96,35 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> editTask(String id, String newTitle) async {
+    try {
+      _setLoading(true);
+      _clearError();
+
+      final trimmedTitle = newTitle.trim();
+      if (trimmedTitle.isEmpty) {
+        throw ArgumentError('El título de la tarea no puede estar vacío');
+      }
+
+      final taskIndex = _tasks.indexWhere((task) => task.id == id);
+      if (taskIndex == -1) {
+        throw StateError('Tarea no encontrada');
+      }
+
+      if (_tasks.any((task) => task.id != id && task.title == trimmedTitle)) {
+        throw StateError('Ya existe una tarea con este título');
+      }
+
+      _tasks[taskIndex] = _tasks[taskIndex].copyWith(title: trimmedTitle);
+      notifyListeners();
+    } catch (e) {
+      _setError(e.toString());
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   void setSearchQuery(String query) {
     _searchQuery = query.trim();
     notifyListeners();
