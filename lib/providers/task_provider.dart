@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:tasky/db/task_database.dart';
 import '../models/task.dart';
 
 class TaskProvider extends ChangeNotifier {
@@ -11,6 +12,23 @@ class TaskProvider extends ChangeNotifier {
   String get searchQuery => _searchQuery;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  TaskProvider() {
+    loadTasks();
+  }
+
+  Future<void> loadTasks() async {
+    _setLoading(true);
+    try {
+      final dbTasks = await TaskDatabase.instance.getAllTasks();
+      _tasks.clear();
+      _tasks.addAll(dbTasks);
+      notifyListeners();
+    } catch (e) {
+      _setError('Error al cargar tareas: $e');
+    } finally {
+      _setLoading(false);
+    }
+  }
 
   List<Task> get pendingTasks => List.unmodifiable(
     _tasks.where((task) => !task.isCompleted && _matchesSearch(task)).toList()
@@ -47,6 +65,7 @@ class TaskProvider extends ChangeNotifier {
       );
 
       _tasks.add(task);
+      await TaskDatabase.instance.insertTask(task);
       notifyListeners();
     } catch (e) {
       _setError(e.toString());
@@ -67,6 +86,7 @@ class TaskProvider extends ChangeNotifier {
       }
 
       _tasks[taskIndex].isCompleted = !_tasks[taskIndex].isCompleted;
+      await TaskDatabase.instance.updateTask(_tasks[taskIndex]);
       notifyListeners();
     } catch (e) {
       _setError(e.toString());
@@ -86,6 +106,7 @@ class TaskProvider extends ChangeNotifier {
         throw StateError('Tarea no encontrada');
       }
 
+      await TaskDatabase.instance.deleteTask(id);
       _tasks.removeAt(taskIndex);
       notifyListeners();
     } catch (e) {
@@ -116,6 +137,7 @@ class TaskProvider extends ChangeNotifier {
       }
 
       _tasks[taskIndex] = _tasks[taskIndex].copyWith(title: trimmedTitle);
+      await TaskDatabase.instance.updateTask(_tasks[taskIndex]);
       notifyListeners();
     } catch (e) {
       _setError(e.toString());
