@@ -6,6 +6,7 @@ import '../providers/task_provider.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/task_list.dart';
 import '../widgets/new_task_dialog.dart';
+import '../widgets/account_switcher.dart';
 
 class TaskScreen extends StatefulWidget {
   const TaskScreen({super.key});
@@ -16,6 +17,26 @@ class TaskScreen extends StatefulWidget {
 
 class _TaskScreenState extends State<TaskScreen> {
   bool isSearching = false;
+
+  void _showAccountSwitcher(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => SingleChildScrollView(
+          controller: scrollController,
+          child: const AccountSwitcher(),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +53,31 @@ class _TaskScreenState extends State<TaskScreen> {
                       (value) =>
                           context.read<TaskProvider>().setSearchQuery(value),
                 )
-                : const Text('Tasky'),        actions: [
+                : const Text('Tasky'),
+        leading: Consumer<AuthProvider>(
+          builder: (context, authProvider, _) {
+            final currentUser = authProvider.currentUser;
+            if (currentUser == null) return const SizedBox.shrink();
+            
+            return IconButton(
+              icon: CircleAvatar(
+                radius: 16,
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                child: Text(
+                  currentUser.name[0].toUpperCase(),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onPrimary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              onPressed: () => _showAccountSwitcher(context),
+              tooltip: 'Cambiar cuenta',
+            );
+          },
+        ),
+        actions: [
           // Indicador de sincronización
           Consumer<TaskProvider>(
             builder: (context, taskProvider, child) {
@@ -60,105 +105,57 @@ class _TaskScreenState extends State<TaskScreen> {
               });
             },
           ),
-          // Menú de usuario
-          Consumer<AuthProvider>(
-            builder: (context, authProvider, child) {
-              final currentUser = authProvider.currentUser;
-              if (currentUser == null) return const SizedBox.shrink();
-              
-              return PopupMenuButton<String>(
-                onSelected: (value) {
-                  if (value == 'accounts') {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => const AccountManagerScreen(),
-                      ),
-                    );
-                  } else if (value == 'settings') {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => const SettingsScreen(),
-                      ),
-                    );
-                  } else if (value == 'sync') {
-                    context.read<TaskProvider>().syncTasks();
-                  }
-                },
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: 'accounts',
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 12,
-                          backgroundColor: Theme.of(context).colorScheme.primary,
-                          child: Text(
-                            currentUser.name[0].toUpperCase(),
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.onPrimary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                currentUser.name,
-                                style: const TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                              Text(
-                                currentUser.email,
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+          // Menú de opciones
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'accounts') {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const AccountManagerScreen(),
                   ),
-                  const PopupMenuDivider(),
-                  const PopupMenuItem(
-                    value: 'sync',
-                    child: Row(
-                      children: [
-                        Icon(Icons.sync),
-                        SizedBox(width: 8),
-                        Text('Sincronizar'),
-                      ],
-                    ),
+                );
+              } else if (value == 'settings') {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => const SettingsScreen(),
                   ),
-                  const PopupMenuItem(
-                    value: 'settings',
-                    child: Row(
-                      children: [
-                        Icon(Icons.settings),
-                        SizedBox(width: 8),
-                        Text('Configuración'),
-                      ],
-                    ),
-                  ),
-                ],
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: CircleAvatar(
-                    radius: 16,
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    child: Text(
-                      currentUser.name[0].toUpperCase(),
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onPrimary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              );
+                );
+              } else if (value == 'sync') {
+                context.read<TaskProvider>().syncTasks();
+              }
             },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'accounts',
+                child: Row(
+                  children: [
+                    Icon(Icons.manage_accounts),
+                    SizedBox(width: 8),
+                    Text('Gestionar cuentas'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'sync',
+                child: Row(
+                  children: [
+                    Icon(Icons.sync),
+                    SizedBox(width: 8),
+                    Text('Sincronizar'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'settings',
+                child: Row(
+                  children: [
+                    Icon(Icons.settings),
+                    SizedBox(width: 8),
+                    Text('Configuración'),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
