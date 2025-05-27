@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tasky/screens/settings_screen.dart';
+import 'package:tasky/screens/account_manager_screen.dart';
 import '../providers/task_provider.dart';
+import '../providers/auth_provider.dart';
 import '../widgets/task_list.dart';
 import '../widgets/new_task_dialog.dart';
 
@@ -30,8 +32,23 @@ class _TaskScreenState extends State<TaskScreen> {
                       (value) =>
                           context.read<TaskProvider>().setSearchQuery(value),
                 )
-                : const Text('Tasky'),
-        actions: [
+                : const Text('Tasky'),        actions: [
+          // Indicador de sincronización
+          Consumer<TaskProvider>(
+            builder: (context, taskProvider, child) {
+              if (taskProvider.isSyncing) {
+                return const Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
           IconButton(
             icon: Icon(isSearching ? Icons.close : Icons.search),
             onPressed: () {
@@ -43,12 +60,104 @@ class _TaskScreenState extends State<TaskScreen> {
               });
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
+          // Menú de usuario
+          Consumer<AuthProvider>(
+            builder: (context, authProvider, child) {
+              final currentUser = authProvider.currentUser;
+              if (currentUser == null) return const SizedBox.shrink();
+              
+              return PopupMenuButton<String>(
+                onSelected: (value) {
+                  if (value == 'accounts') {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const AccountManagerScreen(),
+                      ),
+                    );
+                  } else if (value == 'settings') {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const SettingsScreen(),
+                      ),
+                    );
+                  } else if (value == 'sync') {
+                    context.read<TaskProvider>().syncTasks();
+                  }
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'accounts',
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 12,
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          child: Text(
+                            currentUser.name[0].toUpperCase(),
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onPrimary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                currentUser.name,
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                currentUser.email,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(
+                    value: 'sync',
+                    child: Row(
+                      children: [
+                        Icon(Icons.sync),
+                        SizedBox(width: 8),
+                        Text('Sincronizar'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'settings',
+                    child: Row(
+                      children: [
+                        Icon(Icons.settings),
+                        SizedBox(width: 8),
+                        Text('Configuración'),
+                      ],
+                    ),
+                  ),
+                ],
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: CircleAvatar(
+                    radius: 16,
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    child: Text(
+                      currentUser.name[0].toUpperCase(),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onPrimary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              );
             },
           ),
         ],

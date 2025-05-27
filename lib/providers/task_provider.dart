@@ -1,25 +1,52 @@
 import 'package:flutter/foundation.dart';
 import 'package:tasky/db/task_database.dart';
 import '../models/task.dart';
+import '../services/task_service.dart';
+import '../services/secure_storage.dart';
 
 class TaskProvider extends ChangeNotifier {
   final List<Task> _tasks = [];
   String _searchQuery = '';
   bool _isLoading = false;
   String? _error;
+  String? _currentUserId;
+  bool _isSyncing = false;
 
   List<Task> get tasks => List.unmodifiable(_tasks);
   String get searchQuery => _searchQuery;
   bool get isLoading => _isLoading;
+  bool get isSyncing => _isSyncing;
   String? get error => _error;
-  TaskProvider() {
-    loadTasks();
+  String? get currentUserId => _currentUserId;  TaskProvider() {
+    _initializeForCurrentUser();
   }
 
+  Future<void> _initializeForCurrentUser() async {
+    final userId = await SecureStorage.getCurrentUserId();
+    await setCurrentUser(userId);
+  }
+
+  Future<void> setCurrentUser(String? userId) async {
+    if (_currentUserId == userId) return;
+    
+    _currentUserId = userId;
+    await loadTasks();
+    
+    // Intentar sincronizar si hay usuario autenticado
+    if (userId != null) {
+      syncTasks();
+    }
+  }
   Future<void> loadTasks() async {
     _setLoading(true);
     try {
-      final dbTasks = await TaskDatabase.instance.getAllTasks();
+      List<Task> dbTasks;
+      if (_currentUserId != null) {
+        dbTasks = await TaskDatabase.instance.getTasksForUser(_currentUserId!);
+      } else {
+        dbTasks = await TaskDatabase.instance.getAllTasks();
+      }
+      
       _tasks.clear();
       _tasks.addAll(dbTasks);
       notifyListeners();
@@ -58,11 +85,12 @@ class TaskProvider extends ChangeNotifier {
       if (_tasks.any((task) => task.title == trimmedTitle)) {
         throw StateError('Ya existe una tarea con este título');
       }
-
-      final task = Task(
-        id: DateTime.now().toIso8601String(),
-        title: trimmedTitle,
-      );
+    final task = Task(
+      id: DateTime.now().toIso8601String(),
+      title: trimmedTitle,
+      userId: _currentUserId,
+      needsSync: _currentUserId != null, // Solo sincronizar si hay usuario
+    );
 
       _tasks.add(task);
       await TaskDatabase.instance.insertTask(task);
@@ -150,6 +178,76 @@ class TaskProvider extends ChangeNotifier {
   void setSearchQuery(String query) {
     _searchQuery = query.trim();
     notifyListeners();
+  }
+
+  Future<void> syncTasks() async {
+    if (_currentUserId == null || _isSyncing) return;
+
+    _isSyncing = true;
+    notifyListeners();
+
+    try {
+      final token = await SecureStorage.getToken();
+      if (token == null) return;
+
+      // Obtener tareas que necesitan sincronización
+      final tasksToSync = await TaskDatabase.instance.getTasksNeedingSync(_currentUserId!);
+      
+      if (tasksToSync.isNotEmpty) {
+        // Sincronizar tareas locales con el servidor
+        final syncedTasks = await TaskService.syncTasks(token, _currentUserId!, tasksToSync);
+        
+        // Actualizar base de datos local con IDs del servidor
+        for (int i = 0; i < tasksToSync.length && i < syncedTasks.length; i++) {
+          final localTask = tasksToSync[i];
+          final syncedTask = syncedTasks[i];
+          await TaskDatabase.instance.markTaskAsSynced(localTask.id, syncedTask.serverId!);
+        }
+      }
+
+      // Obtener todas las tareas del servidor
+      final serverTasks = await TaskService.getTasks(token, _currentUserId!);
+      
+      // Actualizar lista local
+      await _mergeServerTasks(serverTasks);
+      
+    } catch (e) {
+      // No mostrar error de sincronización al usuario a menos que sea crítico
+      if (kDebugMode) {
+        print('Error en sincronización: $e');
+      }
+    } finally {
+      _isSyncing = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _mergeServerTasks(List<Task> serverTasks) async {
+    for (final serverTask in serverTasks) {
+      // Buscar si ya existe una tarea con el mismo server_id
+      final existingIndex = _tasks.indexWhere((task) => task.serverId == serverTask.serverId);
+      
+      if (existingIndex >= 0) {
+        // Actualizar tarea existente
+        _tasks[existingIndex] = serverTask.copyWith(
+          id: _tasks[existingIndex].id, // Mantener ID local
+          userId: _currentUserId,
+          needsSync: false,
+        );
+        await TaskDatabase.instance.updateTask(_tasks[existingIndex]);
+      } else {
+        // Agregar nueva tarea del servidor
+        final newTask = serverTask.copyWith(
+          id: DateTime.now().millisecondsSinceEpoch.toString() + serverTask.serverId!,
+          userId: _currentUserId,
+          needsSync: false,
+        );
+        _tasks.add(newTask);
+        await TaskDatabase.instance.insertTask(newTask);
+      }
+    }
+    
+    await loadTasks(); // Recargar para asegurar consistencia
   }
 
   void _setLoading(bool value) {
