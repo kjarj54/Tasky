@@ -8,16 +8,16 @@ class ApiConfig {
   static String get baseUrl {
     if (kIsWeb) {
       // Para Flutter Web - usar localhost
-      return 'http://localhost:3001/api';
+      return 'http://localhost:3000/api';
     } else if (Platform.isAndroid) {
       // Para emulador de Android - usar IP especial del emulador
-      return 'http://10.0.2.2:3001/api';
+      return 'http://10.0.2.2:3000/api';
     } else if (Platform.isIOS) {
       // Para simulador de iOS - usar localhost
-      return 'http://localhost:3001/api';
+      return 'http://localhost:3000/api';
     } else {
       // Para otras plataformas (Windows, macOS, Linux) - usar localhost
-      return 'http://localhost:3001/api';
+      return 'http://localhost:3000/api';
     }
   }
   
