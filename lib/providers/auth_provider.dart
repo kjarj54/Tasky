@@ -217,4 +217,42 @@ class AuthProvider extends ChangeNotifier {
       _setState(AuthState.unauthenticated);
     }
   }
+
+  // Método para configurar una sesión específica del usuario
+  Future<void> setUserSession(User user, String token, String refreshToken) async {
+    _currentUser = user;
+    _authenticatedUsers[user.id] = user;
+    
+    await SecureStorage.saveUser(user, token, refreshToken);
+    await SecureStorage.setCurrentUser(user.id);
+    _setState(AuthState.authenticated);
+  }
+
+  // Método para verificar si un usuario específico está autenticado
+  bool isUserAuthenticated(String userId) {
+    return _authenticatedUsers.containsKey(userId);
+  }
+
+  // Método para obtener información de un usuario específico
+  User? getUserById(String userId) {
+    return _authenticatedUsers[userId];
+  }
+
+  // Método para inicializar con un usuario específico (para sesiones múltiples)
+  Future<void> initializeWithUser(String userId) async {
+    if (_authenticatedUsers.containsKey(userId)) {
+      await switchUser(userId);
+    } else {
+      // Cargar usuario desde storage si no está en memoria
+      final tokens = await SecureStorage.getUserTokens(userId);
+      if (tokens != null) {
+        final users = await SecureStorage.getAuthenticatedUsers();
+        final user = users[userId];
+        if (user != null) {
+          _authenticatedUsers[userId] = user;
+          await switchUser(userId);
+        }
+      }
+    }
+  }
 }

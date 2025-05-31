@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/task_provider.dart';
 import 'providers/auth_provider.dart';
+import 'providers/multi_session_provider.dart';
 import 'screens/task_screen.dart';
 import 'screens/login_screen.dart';
 import 'providers/theme_provider.dart';
+import 'widgets/multi_session_app.dart';
 
 void main() {
   runApp(const MainApp());
@@ -14,7 +16,26 @@ class MainApp extends StatelessWidget {
   const MainApp({super.key});
 
   @override
-  Widget build(BuildContext context) {    return MultiProvider(
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) => MultiSessionProvider(),
+      child: Consumer<MultiSessionProvider>(
+        builder: (context, multiSessionProvider, child) {
+          // Modo de sesiones múltiples - nueva funcionalidad
+          return const MultiSessionApp();
+        },
+      ),
+    );
+  }
+}
+
+// Mantener la clase original para compatibilidad hacia atrás
+class SingleSessionApp extends StatelessWidget {
+  const SingleSessionApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
@@ -25,7 +46,8 @@ class MainApp extends StatelessWidget {
             return taskProvider ?? TaskProvider();
           },
         ),
-      ],      child: Consumer2<ThemeProvider, AuthProvider>(
+      ],
+      child: Consumer2<ThemeProvider, AuthProvider>(
         builder: (context, themeProvider, authProvider, child) {
           return MaterialApp(
             title: 'Tasky',
@@ -46,7 +68,8 @@ class MainApp extends StatelessWidget {
             ),
             themeMode: themeProvider.themeMode,
             home: _getHomeScreen(authProvider.state),
-          );        },
+          );
+        },
       ),
     );
   }
