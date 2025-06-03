@@ -78,14 +78,18 @@ class ApiService {
       throw ApiException('Error de conexión: $e');
     }
   }
-
   static Future<Map<String, dynamic>> post(String endpoint, Map<String, dynamic> data, [String? token]) async {
     try {
-      final response = await http.post(
+      print('POST $endpoint');
+      print('Request data: ${json.encode(data)}');
+        final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}$endpoint'),
         headers: ApiConfig.getHeaders(token),
         body: json.encode(data),
       ).timeout(ApiConfig.timeout);
+      
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
       
       return await _handleResponse(response);
     } catch (e) {

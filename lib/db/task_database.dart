@@ -71,12 +71,11 @@ class TaskDatabase {
     final result = await db.query('tasks');
     return result.map((map) => Task.fromMap(map)).toList();
   }
-
   Future<List<Task>> getTasksForUser(String userId) async {
     final db = await database;
     final result = await db.query(
       'tasks',
-      where: 'user_id = ? OR user_id IS NULL',
+      where: 'user_id = ?',
       whereArgs: [userId],
     );
     return result.map((map) => Task.fromMap(map)).toList();

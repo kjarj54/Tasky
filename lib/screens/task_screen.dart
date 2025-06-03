@@ -40,15 +40,20 @@ class _TaskScreenState extends State<TaskScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
+    return Scaffold(      appBar: AppBar(
         title:
-            isSearching
-                ? TextField(
+            isSearching                ? TextField(
                   decoration: const InputDecoration(
                     hintText: 'Buscar tareas...',
                     border: InputBorder.none,
                   ),
+                  autofocus: true,
+                  keyboardType: TextInputType.text,
+                  onSubmitted: (_) {
+                    setState(() {
+                      isSearching = false;
+                    });
+                  },
                   onChanged:
                       (value) =>
                           context.read<TaskProvider>().setSearchQuery(value),
@@ -57,23 +62,27 @@ class _TaskScreenState extends State<TaskScreen> {
         leading: Consumer<AuthProvider>(
           builder: (context, authProvider, _) {
             final currentUser = authProvider.currentUser;
-            if (currentUser == null) return const SizedBox.shrink();
-            
-            return IconButton(
-              icon: CircleAvatar(
-                radius: 16,
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                child: Text(
-                  currentUser.name[0].toUpperCase(),
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onPrimary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
+            if (currentUser == null) return const SizedBox.shrink();          return Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: InkWell(
+                onTap: () => _showAccountSwitcher(context),
+                borderRadius: BorderRadius.circular(20),
+                child: Tooltip(
+                  message: 'Cambiar cuenta: ${currentUser.email}',
+                  child: CircleAvatar(
+                    radius: 18,
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    child: Text(
+                      currentUser.name[0].toUpperCase(),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
                   ),
                 ),
               ),
-              onPressed: () => _showAccountSwitcher(context),
-              tooltip: 'Cambiar cuenta',
             );
           },
         ),

@@ -118,15 +118,21 @@ class MultiSessionProvider extends ChangeNotifier {
     
     notifyListeners();
     return sessionId;
-  }
-
-  // Cambiar a una sesión específica
-  void switchToSession(String sessionId) {
+  }  // Cambiar a una sesión específica
+  Future<void> switchToSession(String sessionId) async {
     if (_activeSessions.containsKey(sessionId)) {
       _currentSessionId = sessionId;
       
+      // Refrescar las tareas de la nueva sesión
+      final newSession = _activeSessions[sessionId]!;
+      await newSession.taskProvider.refreshTasks();
+      
       // Guardar cambio en el almacenamiento
-      _saveCurrentSessionToStorage();
+      await _saveCurrentSessionToStorage();
+      
+      if (kDebugMode) {
+        print('Cambiado a sesión: $sessionId (usuario: ${newSession.user.name})');
+      }
       
       notifyListeners();
     }
@@ -190,7 +196,6 @@ class MultiSessionProvider extends ChangeNotifier {
       return null;
     }
   }
-
   // Crear o cambiar a la sesión de un usuario
   Future<String> createOrSwitchToUserSession(User user) async {
     // Verificar si ya existe una sesión para este usuario
@@ -200,7 +205,7 @@ class MultiSessionProvider extends ChangeNotifier {
 
     if (existingSession != null) {
       // Cambiar a la sesión existente
-      switchToSession(existingSession.sessionId);
+      await switchToSession(existingSession.sessionId);
       return existingSession.sessionId;
     } else {
       // Crear nueva sesión

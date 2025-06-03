@@ -63,14 +63,25 @@ class Task {
     serverId: map['server_id'],
     needsSync: map['needs_sync'] == 1,
   );
-
   // Convert Task to JSON for API requests
-  Map<String, dynamic> toJson() => {
-    'id': serverId ?? id,
-    'title': title,
-    'is_completed': isCompleted,
-    'created_at': createdAt.toIso8601String(),
-  };
+  Map<String, dynamic> toJson() {
+    final json = <String, dynamic>{
+      'title': title,
+      'is_completed': isCompleted,
+      'created_at': createdAt.toIso8601String(),
+    };
+    
+    // Only include ID if we have a valid serverId (integer from backend)
+    if (serverId != null) {
+      // Parse serverId to ensure it's a valid integer
+      final serverIdInt = int.tryParse(serverId!);
+      if (serverIdInt != null) {
+        json['id'] = serverIdInt;
+      }
+    }
+    
+    return json;
+  }
 
   // Create a Task from API response
   factory Task.fromJson(Map<String, dynamic> json, String? userId) => Task(

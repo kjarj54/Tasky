@@ -25,33 +25,50 @@ class TaskProvider extends ChangeNotifier {
     final userId = await SecureStorage.getCurrentUserId();
     await setCurrentUser(userId);
   }
-
   Future<void> setCurrentUser(String? userId) async {
     if (_currentUserId == userId) return;
     
     _currentUserId = userId;
+    
+    // Limpiar las tareas actuales antes de cargar las nuevas
+    _tasks.clear();
+    _clearError();
+    notifyListeners();
+    
+    // Cargar las tareas del nuevo usuario
     await loadTasks();
     
     // Intentar sincronizar si hay usuario autenticado
     if (userId != null) {
       syncTasks();
     }
-  }
-  Future<void> loadTasks() async {
+  }  Future<void> loadTasks() async {
     _setLoading(true);
     try {
       List<Task> dbTasks;
       if (_currentUserId != null) {
+        // Solo cargar tareas específicas del usuario actual
         dbTasks = await TaskDatabase.instance.getTasksForUser(_currentUserId!);
       } else {
+        // Si no hay usuario, cargar tareas sin asociar a usuario (para modo offline)
         dbTasks = await TaskDatabase.instance.getAllTasks();
+        // Filtrar solo las tareas que no tienen userId asignado
+        dbTasks = dbTasks.where((task) => task.userId == null).toList();
       }
       
       _tasks.clear();
       _tasks.addAll(dbTasks);
+      
+      if (kDebugMode) {
+        print('Cargadas ${_tasks.length} tareas para usuario: $_currentUserId');
+      }
+      
       notifyListeners();
     } catch (e) {
       _setError('Error al cargar tareas: $e');
+      if (kDebugMode) {
+        print('Error al cargar tareas: $e');
+      }
     } finally {
       _setLoading(false);
     }
@@ -84,9 +101,8 @@ class TaskProvider extends ChangeNotifier {
 
       if (_tasks.any((task) => task.title == trimmedTitle)) {
         throw StateError('Ya existe una tarea con este título');
-      }
-    final task = Task(
-      id: DateTime.now().toIso8601String(),
+      }    final task = Task(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
       title: trimmedTitle,
       userId: _currentUserId,
       needsSync: _currentUserId != null, // Solo sincronizar si hay usuario
@@ -184,10 +200,12 @@ class TaskProvider extends ChangeNotifier {
     if (_currentUserId == null || _isSyncing) return;
 
     _isSyncing = true;
-    notifyListeners();
-
-    try {
-      final token = await SecureStorage.getToken();
+    notifyListeners();    try {
+      // Obtener el token específico del usuario actual
+      final tokens = await SecureStorage.getUserTokens(_currentUserId!);
+      if (tokens == null) return;
+      
+      final token = tokens['token'];
       if (token == null) return;
 
       // Obtener tareas que necesitan sincronización
@@ -264,10 +282,28 @@ class TaskProvider extends ChangeNotifier {
     _error = null;
     notifyListeners();
   }
-
   void resetError() {
     _error = null;
     _isLoading = false;
+    notifyListeners();
+  }
+
+  /// Refresca las tareas del usuario actual
+  /// Útil cuando se cambia de sesión para mostrar las tareas correctas
+  Future<void> refreshTasks() async {
+    await loadTasks();
+    
+    // También sincronizar si hay usuario autenticado
+    if (_currentUserId != null) {
+      syncTasks();
+    }
+  }
+
+  /// Limpia todas las tareas del provider
+  /// Útil cuando se cierra sesión o se cambia de usuario
+  void clearTasks() {
+    _tasks.clear();
+    _clearError();
     notifyListeners();
   }
 }

@@ -4,7 +4,9 @@ import '../providers/auth_provider.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final bool isAddingAccount;
+  
+  const LoginScreen({super.key, this.isAddingAccount = false});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -22,13 +24,30 @@ class _LoginScreenState extends State<LoginScreen> {
     _passwordController.dispose();
     super.dispose();
   }
-
   Future<void> _login() async {
     if (_formKey.currentState!.validate()) {
-      await context.read<AuthProvider>().login(
-        _emailController.text.trim(),
-        _passwordController.text,
-      );
+      final authProvider = context.read<AuthProvider>();
+      
+      try {
+        if (widget.isAddingAccount) {
+          // Usando loginWithoutLogout para agregar una cuenta sin cerrar la sesión actual
+          await authProvider.loginWithoutLogout(
+            _emailController.text.trim(),
+            _passwordController.text,
+          );
+          if (context.mounted) {
+            Navigator.of(context).pop(); // Regresar después de agregar cuenta
+          }
+        } else {
+          // Inicio de sesión normal
+          await authProvider.login(
+            _emailController.text.trim(),
+            _passwordController.text,
+          );
+        }
+      } catch (e) {
+        // El error ya es manejado por el AuthProvider
+      }
     }
   }
 
@@ -52,9 +71,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       size: 80,
                       color: Theme.of(context).colorScheme.primary,
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Tasky',
+                    const SizedBox(height: 16),                    Text(
+                      widget.isAddingAccount ? 'Agregar cuenta' : 'Tasky',
                       style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: Theme.of(context).colorScheme.primary,
@@ -67,9 +85,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: Theme.of(context).textTheme.bodyLarge,
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 48),
-
-                    // Campo de email
+                    const SizedBox(height: 48),                    // Campo de email
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
@@ -78,6 +94,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         prefixIcon: Icon(Icons.email),
                         border: OutlineInputBorder(),
                       ),
+                      autocorrect: false,
+                      enableSuggestions: false,
                       validator: (value) {
                         if (value == null || value.trim().isEmpty) {
                           return 'Por favor ingrese su correo electrónico';
@@ -88,12 +106,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 16),
-
-                    // Campo de contraseña
+                    const SizedBox(height: 16),                    // Campo de contraseña
                     TextFormField(
                       controller: _passwordController,
                       obscureText: _obscurePassword,
+                      keyboardType: TextInputType.visiblePassword,
                       decoration: InputDecoration(
                         labelText: 'Contraseña',
                         prefixIcon: const Icon(Icons.lock),
@@ -107,6 +124,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         border: const OutlineInputBorder(),
                       ),
+                      autocorrect: false,
+                      enableSuggestions: false,
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Por favor ingrese su contraseña';
@@ -162,18 +181,21 @@ class _LoginScreenState extends State<LoginScreen> {
                               width: 20,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Text('Iniciar Sesión'),
+                          : Text(widget.isAddingAccount ? 'Agregar cuenta' : 'Iniciar Sesión'),
                     ),
                     const SizedBox(height: 16),
 
                     // Botón para ir a registro
                     TextButton(
                       onPressed: authProvider.isLoading
-                          ? null
-                          : () {
+                          ? null                          : () {
+                              final authProvider = Provider.of<AuthProvider>(context, listen: false);
                               Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (context) => const RegisterScreen(),
+                                  builder: (context) => ChangeNotifierProvider<AuthProvider>.value(
+                                    value: authProvider,
+                                    child: const RegisterScreen(),
+                                  ),
                                 ),
                               );
                             },

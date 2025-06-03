@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/multi_session_provider.dart';
+import '../providers/auth_provider.dart';
 import '../models/auth.dart';
 import '../services/auth_service.dart';
 import 'register_screen.dart';
@@ -234,11 +235,14 @@ class _MultiSessionLoginScreenState extends State<MultiSessionLoginScreen> {
                 // Botón de registro
                 TextButton(
                   onPressed: _isLoading
-                      ? null
-                      : () {
+                      ? null                      : () {
+                          // Create a new AuthProvider for registration
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (context) => const RegisterScreen(),
+                              builder: (context) => ChangeNotifierProvider<AuthProvider>(
+                                create: (_) => AuthProvider(),
+                                child: const RegisterScreen(),
+                              ),
                             ),
                           );
                         },

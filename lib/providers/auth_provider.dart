@@ -67,7 +67,6 @@ class AuthProvider extends ChangeNotifier {
       _setState(AuthState.unauthenticated);
     }
   }
-
   Future<void> login(String email, String password) async {
     _setLoading(true);
     _clearError();
@@ -86,6 +85,32 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  // Método para iniciar sesión con una cuenta adicional sin cerrar la sesión actual
+  Future<void> loginWithoutLogout(String email, String password) async {
+    _setLoading(true);
+    _clearError();
+    
+    try {
+      final loginRequest = LoginRequest(email: email, password: password);
+      final authResponse = await AuthService.login(loginRequest);
+      
+      // Guardar usuario en la lista de usuarios autenticados
+      _authenticatedUsers[authResponse.user.id] = authResponse.user;
+      await SecureStorage.saveUser(
+        authResponse.user,
+        authResponse.token,
+        authResponse.refreshToken,
+      );
+      
+      // Cambiar al nuevo usuario
+      await switchUser(authResponse.user.id);
+    } catch (e) {
+      _setError(e.toString());
+      _setState(AuthState.error);
+    } finally {
+      _setLoading(false);
+    }
+  }
   Future<void> register(String name, String email, String password) async {
     _setLoading(true);
     _clearError();
@@ -100,6 +125,37 @@ class AuthProvider extends ChangeNotifier {
       
       await _saveAuthData(authResponse);
       _setState(AuthState.authenticated);
+    } catch (e) {
+      _setError(e.toString());
+      _setState(AuthState.error);
+    } finally {
+      _setLoading(false);
+    }
+  }
+  
+  // Método para registrar una cuenta adicional sin cerrar la sesión actual
+  Future<void> registerWithoutLogout(String name, String email, String password) async {
+    _setLoading(true);
+    _clearError();
+    
+    try {
+      final registerRequest = RegisterRequest(
+        name: name,
+        email: email,
+        password: password,
+      );
+      final authResponse = await AuthService.register(registerRequest);
+      
+      // Guardar usuario en la lista de usuarios autenticados
+      _authenticatedUsers[authResponse.user.id] = authResponse.user;
+      await SecureStorage.saveUser(
+        authResponse.user,
+        authResponse.token,
+        authResponse.refreshToken,
+      );
+      
+      // Cambiar al nuevo usuario
+      await switchUser(authResponse.user.id);
     } catch (e) {
       _setError(e.toString());
       _setState(AuthState.error);

@@ -151,7 +151,7 @@ class MultiSessionDashboard extends StatelessWidget {
           isCurrentSession: isCurrentSession,
           onTap: () => _openSessionInNewWindow(context, session),
           onClose: () => provider.closeSession(session.sessionId),
-          onMakeCurrent: () => provider.switchToSession(session.sessionId),
+          onMakeCurrent: () async => await provider.switchToSession(session.sessionId),
         );
       },
     );
@@ -213,7 +213,7 @@ class SessionCard extends StatelessWidget {
   final bool isCurrentSession;
   final VoidCallback onTap;
   final VoidCallback onClose;
-  final VoidCallback onMakeCurrent;
+  final Future<void> Function() onMakeCurrent;
 
   const SessionCard({
     Key? key,
@@ -277,14 +277,13 @@ class SessionCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  PopupMenuButton<String>(
-                    onSelected: (value) {
+                  PopupMenuButton<String>(                    onSelected: (value) async {
                       if (value == 'close') {
                         onClose();
                       } else if (value == 'make_current') {
-                        onMakeCurrent();
+                        await onMakeCurrent();
                       }
-                    },                    itemBuilder: (context) => [
+                    },itemBuilder: (context) => [
                       if (!isCurrentSession)
                         PopupMenuItem(
                           value: 'make_current',
