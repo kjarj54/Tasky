@@ -60,71 +60,58 @@ class Task {
     if (id != null) 'id': id,
     'title': title,
     'is_completed': isCompleted,
-  };  // Create a Task from a database Map
+  };
+
+  // Create a Task from a database Map
   factory Task.fromMap(Map<String, dynamic> map) {
-    try {
-      // Handle potential type mismatches from database
-      int? id;
-      if (map['id'] is int) {
-        id = map['id'] as int;
-      } else if (map['id'] is String) {
-        id = int.tryParse(map['id']);
-      }
-      
-      int? userId;
-      if (map['user_id'] is int) {
-        userId = map['user_id'] as int;
-      } else if (map['user_id'] is String) {
-        userId = int.tryParse(map['user_id']);
-      }
-      
-      String title = map['title']?.toString() ?? '';
-      if (title.isEmpty) {
-        throw ArgumentError('Task title cannot be empty');
-      }
-      
-      bool isCompleted = false;
-      final completedValue = map['is_completed'];
-      if (completedValue is int) {
-        isCompleted = completedValue == 1;
-      } else if (completedValue is bool) {
-        isCompleted = completedValue;
-      } else if (completedValue is String) {
-        isCompleted = completedValue == '1' || completedValue.toLowerCase() == 'true';
-      }
-      
-      DateTime createdAt = DateTime.now();
-      if (map['created_at'] != null) {
-        try {
-          createdAt = DateTime.parse(map['created_at'].toString());
-        } catch (e) {
-          // Keep default if parsing fails
-        }
-      }
-      
-      DateTime? updatedAt;
-      if (map['updated_at'] != null) {
-        try {
-          updatedAt = DateTime.parse(map['updated_at'].toString());
-        } catch (e) {
-          // Keep null if parsing fails
-        }
-      }
-      
-      String? tempId = map['temp_id']?.toString();
-      
-      return Task(
-        id: id,
-        userId: userId,
-        title: title,
-        isCompleted: isCompleted,
-        createdAt: createdAt,
-        updatedAt: updatedAt,
-        tempId: tempId,
-      );
-    } catch (e) {
-      throw ArgumentError('Failed to create Task from map: $e. Map data: $map');
+    // Handle potential type mismatches from database
+    int? id = map['id'] as int?;
+    if (map['id'] is String) id = int.tryParse(map['id']);
+    
+    int? userId = map['user_id'] as int?;
+    if (map['user_id'] is String) userId = int.tryParse(map['user_id']);
+    
+    String title = map['title']?.toString() ?? '';
+    
+    bool isCompleted = false;
+    final completedValue = map['is_completed'];
+    if (completedValue is int) {
+      isCompleted = completedValue == 1;
+    } else if (completedValue is bool) {
+      isCompleted = completedValue;
+    } else if (completedValue is String) {
+      isCompleted = completedValue == '1' || completedValue.toLowerCase() == 'true';
     }
+    
+    DateTime createdAt = DateTime.now();
+    if (map['created_at'] != null) {
+      try {
+        createdAt = DateTime.parse(map['created_at'].toString());
+      } catch (e) {
+        // Keep default if parsing fails
+      }
+    }
+    
+    DateTime? updatedAt;
+    if (map['updated_at'] != null) {
+      try {
+        updatedAt = DateTime.parse(map['updated_at'].toString());
+      } catch (e) {
+        // Keep null if parsing fails
+      }
+    }
+    
+    String? tempId = map['temp_id']?.toString();
+    
+    return Task(
+      id: id,
+      userId: userId,
+      title: title,
+      isCompleted: isCompleted,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      tempId: tempId,
+    );
   }
 
   // Create a Task from API response

@@ -10,9 +10,24 @@ class TaskList extends StatelessWidget {
   const TaskList({super.key, required this.showCompleted, required this.title});
 
   @override
-  Widget build(BuildContext context) {
-    return Consumer<TaskProvider>(
+  Widget build(BuildContext context) {    return Consumer<TaskProvider>(
       builder: (context, taskProvider, child) {
+        if (taskProvider.isSwitchingAccount) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Text(
+                  'Cambiando cuenta...',
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+              ],
+            ),
+          );
+        }
+        
         if (taskProvider.isLoading) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -74,9 +89,8 @@ class TaskList extends StatelessWidget {
               child: ListView.builder(
                 itemCount: tasks.length,
                 itemBuilder: (context, index) {
-                  final task = tasks[index];
-                  return Dismissible(
-                    key: Key(task.id),
+                  final task = tasks[index];                  return Dismissible(
+                    key: Key(task.uniqueId),
                     direction: DismissDirection.endToStart,
                     background: Container(
                       color: Theme.of(context).colorScheme.error,
@@ -106,9 +120,8 @@ class TaskList extends StatelessWidget {
                                   ),
                                 ],
                               ),
-                        ),
-                    onDismissed: (_) {
-                      taskProvider.deleteTask(task.id).catchError((error) {
+                        ),                    onDismissed: (_) {
+                      taskProvider.deleteTask(task.uniqueId).catchError((error) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text('Error: ${error.toString()}'),
@@ -121,7 +134,7 @@ class TaskList extends StatelessWidget {
                     child: TaskItem(
                       task: task,
                       onToggle: (_) {
-                        taskProvider.toggleTask(task.id).catchError((error) {
+                        taskProvider.toggleTask(task.uniqueId).catchError((error) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('Error: ${error.toString()}'),
@@ -131,7 +144,7 @@ class TaskList extends StatelessWidget {
                         });
                       },
                       onDelete: () {
-                        taskProvider.deleteTask(task.id).catchError((error) {
+                        taskProvider.deleteTask(task.uniqueId).catchError((error) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('Error: ${error.toString()}'),
@@ -141,7 +154,7 @@ class TaskList extends StatelessWidget {
                         });
                       },
                       onEdit: (newTitle) {
-                        taskProvider.editTask(task.id, newTitle).catchError((error) {
+                        taskProvider.editTask(task.uniqueId, newTitle).catchError((error) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('Error: ${error.toString()}'),
