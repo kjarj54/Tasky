@@ -46,8 +46,7 @@ class MultiSessionProvider extends ChangeNotifier {
       .toList();
 
   int get sessionCount => _activeSessions.length;
-  bool get hasActiveSessions => _activeSessions.isNotEmpty;
-  // Crear una nueva sesión para un usuario
+  bool get hasActiveSessions => _activeSessions.isNotEmpty;  // Crear una nueva sesión para un usuario
   Future<String> createSession(User user) async {
     final sessionId = '${user.id}_${DateTime.now().millisecondsSinceEpoch}';
     
@@ -74,16 +73,21 @@ class MultiSessionProvider extends ChangeNotifier {
     // Si es la primera sesión, hacerla actual
     if (_currentSessionId == null) {
       _currentSessionId = sessionId;
+      // Actualizar el usuario actual en el almacenamiento seguro
+      await SecureStorage.setCurrentUser(user.id);
     }
 
     // Guardar cambios en el almacenamiento
     await _saveActiveSessionsToStorage();
     await _saveCurrentSessionToStorage();
     
+    if (kDebugMode) {
+      print('Nueva sesión creada para usuario: ${user.name} (${user.id})');
+    }
+    
     notifyListeners();
     return sessionId;
   }
-
   // Crear sesión con datos de autenticación completos
   Future<String> createSessionWithAuthData(User user, String token, String refreshToken) async {
     final sessionId = '${user.id}_${DateTime.now().millisecondsSinceEpoch}';
@@ -110,38 +114,74 @@ class MultiSessionProvider extends ChangeNotifier {
     // Si es la primera sesión, hacerla actual
     if (_currentSessionId == null) {
       _currentSessionId = sessionId;
+      // Actualizar el usuario actual en el almacenamiento seguro
+      await SecureStorage.setCurrentUser(user.id);
     }
 
     // Guardar cambios en el almacenamiento
     await _saveActiveSessionsToStorage();
     await _saveCurrentSessionToStorage();
     
+    if (kDebugMode) {
+      print('Sesión creada para usuario: ${user.name} (${user.id})');
+    }
+    
     notifyListeners();
     return sessionId;
   }  // Cambiar a una sesión específica
   Future<void> switchToSession(String sessionId) async {
     if (_activeSessions.containsKey(sessionId)) {
+      final previousSessionId = _currentSessionId;
       _currentSessionId = sessionId;
       
-      // Refrescar las tareas de la nueva sesión
+      // Obtener la nueva sesión
       final newSession = _activeSessions[sessionId]!;
+      
+      // Limpiar las tareas del provider anterior si existe
+      if (previousSessionId != null && _activeSessions.containsKey(previousSessionId)) {
+        final previousSession = _activeSessions[previousSessionId]!;
+        
+        // Guardar cualquier cambio pendiente de la sesión anterior antes de cambiar
+        if (kDebugMode) {
+          print('Sincronizando sesión anterior antes de cambiar...');
+        }
+        await previousSession.taskProvider.syncTasks();
+        previousSession.taskProvider.clearTasks();
+      }
+      
+      // Esperar un poco para asegurarnos que la sesión anterior se ha limpiado correctamente
+      await Future.delayed(const Duration(milliseconds: 300));
+      
+      // Asegurar que el TaskProvider tenga el usuario correcto y recargar tareas
+      await newSession.taskProvider.setCurrentUser(newSession.user.id);
+      
+      // Sincronizar tareas con el servidor para asegurar que tenemos los datos más recientes
+      if (kDebugMode) {
+        print('Sincronizando sesión nueva al cambiar...');
+      }
       await newSession.taskProvider.refreshTasks();
+      
+      // Actualizar el usuario actual en el almacenamiento seguro
+      await SecureStorage.setCurrentUser(newSession.user.id);
       
       // Guardar cambio en el almacenamiento
       await _saveCurrentSessionToStorage();
       
       if (kDebugMode) {
         print('Cambiado a sesión: $sessionId (usuario: ${newSession.user.name})');
+        print('Tareas cargadas y sincronizadas para usuario: ${newSession.user.id}');
       }
       
       notifyListeners();
     }
   }
-
   // Cerrar una sesión específica
   Future<void> closeSession(String sessionId) async {
     final session = _activeSessions[sessionId];
     if (session != null) {
+      // Limpiar las tareas del provider antes de cerrar
+      session.taskProvider.clearTasks();
+      
       // Realizar logout del provider de autenticación
       await session.authProvider.logout(session.user.id);
       
@@ -151,29 +191,49 @@ class MultiSessionProvider extends ChangeNotifier {
       // Si era la sesión actual, cambiar a otra disponible
       if (_currentSessionId == sessionId) {
         if (_activeSessions.isNotEmpty) {
-          _currentSessionId = _activeSessions.keys.first;
+          final newSessionId = _activeSessions.keys.first;
+          await switchToSession(newSessionId);
         } else {
           _currentSessionId = null;
+          // Limpiar usuario actual del almacenamiento
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove('current_user_id');
         }
       }
       
       // Guardar cambios en el almacenamiento
       await _saveActiveSessionsToStorage();
       await _saveCurrentSessionToStorage();
+      
+      if (kDebugMode) {
+        print('Sesión cerrada para usuario: ${session.user.name}');
+      }
+      
+      notifyListeners();
     }
   }
-
   // Cerrar todas las sesiones
   Future<void> closeAllSessions() async {
     for (final session in _activeSessions.values) {
+      // Limpiar las tareas de cada provider
+      session.taskProvider.clearTasks();
       await session.authProvider.logout(session.user.id);
     }
     
     _activeSessions.clear();
     _currentSessionId = null;
     
-    // Limpiar almacenamiento
+    // Limpiar usuario actual del almacenamiento
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('current_user_id');
+    
+    // Limpiar almacenamiento de sesiones
     await _clearSessionStorage();
+    
+    if (kDebugMode) {
+      print('Todas las sesiones han sido cerradas');
+    }
+    
     notifyListeners();
   }
 
@@ -195,8 +255,7 @@ class MultiSessionProvider extends ChangeNotifier {
     } catch (e) {
       return null;
     }
-  }
-  // Crear o cambiar a la sesión de un usuario
+  }  // Crear o cambiar a la sesión de un usuario
   Future<String> createOrSwitchToUserSession(User user) async {
     // Verificar si ya existe una sesión para este usuario
     final existingSession = _activeSessions.values
@@ -206,9 +265,15 @@ class MultiSessionProvider extends ChangeNotifier {
     if (existingSession != null) {
       // Cambiar a la sesión existente
       await switchToSession(existingSession.sessionId);
+      if (kDebugMode) {
+        print('Cambiando a sesión existente para usuario: ${user.name}');
+      }
       return existingSession.sessionId;
     } else {
       // Crear nueva sesión
+      if (kDebugMode) {
+        print('Creando nueva sesión para usuario: ${user.name}');
+      }
       return await createSession(user);
     }
   }

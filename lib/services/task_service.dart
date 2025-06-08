@@ -18,9 +18,22 @@ class TaskService {
     final response = await ApiService.put('/tasks/$taskId', task.toJson(), token);
     return Task.fromJson(response['task'], task.userId);
   }
-
   static Future<void> deleteTask(String token, String taskId) async {
     await ApiService.delete('/tasks/$taskId', token);
+  }
+  
+  // Método para sincronizar tareas eliminadas
+  static Future<void> syncDeletedTasks(String token, List<Task> deletedTasks) async {
+    for (final task in deletedTasks) {
+      if (task.serverId != null) {
+        try {
+          await deleteTask(token, task.serverId!);
+        } catch (e) {
+          // Si el error es 404, es posible que la tarea ya esté eliminada en el servidor
+          print('Error al eliminar tarea en servidor: $e');
+        }
+      }
+    }
   }
 
   static Future<List<Task>> syncTasks(String token, String userId, List<Task> localTasks) async {

@@ -47,13 +47,13 @@ class TaskProvider extends ChangeNotifier {
     try {
       List<Task> dbTasks;
       if (_currentUserId != null) {
-        // Solo cargar tareas específicas del usuario actual
+        // Solo cargar tareas específicas del usuario actual (no eliminadas)
         dbTasks = await TaskDatabase.instance.getTasksForUser(_currentUserId!);
       } else {
         // Si no hay usuario, cargar tareas sin asociar a usuario (para modo offline)
         dbTasks = await TaskDatabase.instance.getAllTasks();
-        // Filtrar solo las tareas que no tienen userId asignado
-        dbTasks = dbTasks.where((task) => task.userId == null).toList();
+        // Filtrar solo las tareas que no tienen userId asignado y no están eliminadas
+        dbTasks = dbTasks.where((task) => task.userId == null && !task.isDeleted).toList();
       }
       
       _tasks.clear();
@@ -139,7 +139,6 @@ class TaskProvider extends ChangeNotifier {
       _setLoading(false);
     }
   }
-
   Future<void> deleteTask(String id) async {
     try {
       _setLoading(true);
@@ -150,8 +149,18 @@ class TaskProvider extends ChangeNotifier {
         throw StateError('Tarea no encontrada');
       }
 
+      // Marcar como eliminada en la base de datos
       await TaskDatabase.instance.deleteTask(id);
+      
+      // Eliminar de la lista en memoria
       _tasks.removeAt(taskIndex);
+      
+      // Si está conectado, intentar sincronizar inmediatamente
+      if (_currentUserId != null && !_isSyncing) {
+        // Sincronizar en segundo plano sin bloquear la UI
+        Future.delayed(Duration.zero, syncTasks);
+      }
+      
       notifyListeners();
     } catch (e) {
       _setError(e.toString());
@@ -195,23 +204,51 @@ class TaskProvider extends ChangeNotifier {
     _searchQuery = query.trim();
     notifyListeners();
   }
-
   Future<void> syncTasks() async {
     if (_currentUserId == null || _isSyncing) return;
 
     _isSyncing = true;
-    notifyListeners();    try {
+    notifyListeners();
+    
+    try {
       // Obtener el token específico del usuario actual
       final tokens = await SecureStorage.getUserTokens(_currentUserId!);
       if (tokens == null) return;
       
       final token = tokens['token'];
       if (token == null) return;
+      
+      if (kDebugMode) {
+        print('Iniciando sincronización para usuario: $_currentUserId');
+      }
 
-      // Obtener tareas que necesitan sincronización
+      // PASO 1: Sincronizar tareas eliminadas
+      final deletedTasks = await TaskDatabase.instance.getDeletedTasksForSync(_currentUserId!);
+      if (deletedTasks.isNotEmpty) {
+        if (kDebugMode) {
+          print('Sincronizando ${deletedTasks.length} tareas eliminadas');
+        }
+        
+        // Eliminar en el servidor
+        await TaskService.syncDeletedTasks(token, deletedTasks);
+        
+        // Eliminar permanentemente de la base de datos local
+        for (final task in deletedTasks) {
+          await TaskDatabase.instance.purgeDeletedTask(task.id);
+          if (kDebugMode) {
+            print('Tarea eliminada permanentemente: ${task.id}');
+          }
+        }
+      }
+
+      // PASO 2: Sincronizar tareas modificadas localmente
       final tasksToSync = await TaskDatabase.instance.getTasksNeedingSync(_currentUserId!);
       
       if (tasksToSync.isNotEmpty) {
+        if (kDebugMode) {
+          print('Sincronizando ${tasksToSync.length} tareas modificadas');
+        }
+        
         // Sincronizar tareas locales con el servidor
         final syncedTasks = await TaskService.syncTasks(token, _currentUserId!, tasksToSync);
         
@@ -223,12 +260,19 @@ class TaskProvider extends ChangeNotifier {
         }
       }
 
-      // Obtener todas las tareas del servidor
+      // PASO 3: Obtener todas las tareas actualizadas del servidor
+      if (kDebugMode) {
+        print('Obteniendo tareas actualizadas del servidor');
+      }
+      
       final serverTasks = await TaskService.getTasks(token, _currentUserId!);
       
-      // Actualizar lista local
+      // Actualizar lista local con las tareas del servidor
       await _mergeServerTasks(serverTasks);
       
+      if (kDebugMode) {
+        print('Sincronización completada con éxito');
+      }
     } catch (e) {
       // No mostrar error de sincronización al usuario a menos que sea crítico
       if (kDebugMode) {
@@ -239,33 +283,69 @@ class TaskProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
-
   Future<void> _mergeServerTasks(List<Task> serverTasks) async {
+    // Obtener un mapa de tareas existentes para búsqueda más rápida
+    final Map<String, Task> existingTasksByServerId = {};
+    for (final task in _tasks) {
+      if (task.serverId != null) {
+        existingTasksByServerId[task.serverId!] = task;
+      }
+    }
+    
+    // Lista de tareas del servidor para comparar
+    final serverTaskIds = serverTasks.map((task) => task.serverId).toSet();
+    
+    // Detectar tareas que están en local pero no en el servidor (posiblemente eliminadas en otro dispositivo)
+    final localTasksToDelete = _tasks.where((task) => 
+      task.serverId != null && 
+      !serverTaskIds.contains(task.serverId) && 
+      !task.isDeleted
+    ).toList();
+    
+    // Eliminar tareas que ya no existen en el servidor
+    for (final taskToDelete in localTasksToDelete) {
+      if (kDebugMode) {
+        print('Eliminando tarea local que ya no existe en el servidor: ${taskToDelete.id}');
+      }
+      await TaskDatabase.instance.purgeDeletedTask(taskToDelete.id);
+    }
+    
+    // Actualizar/agregar tareas del servidor
     for (final serverTask in serverTasks) {
-      // Buscar si ya existe una tarea con el mismo server_id
-      final existingIndex = _tasks.indexWhere((task) => task.serverId == serverTask.serverId);
+      final existingTask = existingTasksByServerId[serverTask.serverId];
       
-      if (existingIndex >= 0) {
-        // Actualizar tarea existente
-        _tasks[existingIndex] = serverTask.copyWith(
-          id: _tasks[existingIndex].id, // Mantener ID local
-          userId: _currentUserId,
-          needsSync: false,
-        );
-        await TaskDatabase.instance.updateTask(_tasks[existingIndex]);
+      if (existingTask != null) {
+        // Solo actualizar si hay cambios
+        if (existingTask.title != serverTask.title || existingTask.isCompleted != serverTask.isCompleted) {
+          if (kDebugMode) {
+            print('Actualizando tarea existente: ${existingTask.id}');
+          }
+          
+          // Actualizar tarea existente manteniendo ID local
+          final updatedTask = serverTask.copyWith(
+            id: existingTask.id,
+            userId: _currentUserId,
+            needsSync: false,
+          );
+          await TaskDatabase.instance.updateTask(updatedTask);
+        }
       } else {
         // Agregar nueva tarea del servidor
+        if (kDebugMode) {
+          print('Agregando nueva tarea del servidor: ${serverTask.serverId}');
+        }
+        
         final newTask = serverTask.copyWith(
           id: DateTime.now().millisecondsSinceEpoch.toString() + serverTask.serverId!,
           userId: _currentUserId,
           needsSync: false,
         );
-        _tasks.add(newTask);
         await TaskDatabase.instance.insertTask(newTask);
       }
     }
     
-    await loadTasks(); // Recargar para asegurar consistencia
+    // Recargar tareas para asegurar consistencia
+    await loadTasks();
   }
 
   void _setLoading(bool value) {
@@ -287,15 +367,36 @@ class TaskProvider extends ChangeNotifier {
     _isLoading = false;
     notifyListeners();
   }
-
   /// Refresca las tareas del usuario actual
   /// Útil cuando se cambia de sesión para mostrar las tareas correctas
   Future<void> refreshTasks() async {
+    // Primero cargar tareas locales
     await loadTasks();
     
-    // También sincronizar si hay usuario autenticado
+    // Asegurar que no hay otra sincronización en progreso
+    if (_isSyncing) {
+      if (kDebugMode) {
+        print('Ya hay una sincronización en progreso. Esperando...');
+      }
+      // Esperar a que termine la sincronización actual
+      while (_isSyncing) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+    }
+    
+    // Sincronizar con el servidor si hay usuario autenticado
     if (_currentUserId != null) {
-      syncTasks();
+      if (kDebugMode) {
+        print('Sincronizando tareas para usuario: $_currentUserId');
+      }
+      await syncTasks(); // Esperar a que termine la sincronización
+      
+      // Recargar tareas locales después de sincronizar
+      await loadTasks();
+    } else {
+      if (kDebugMode) {
+        print('No hay usuario autenticado, no se sincronizarán las tareas');
+      }
     }
   }
 

@@ -12,18 +12,16 @@ class TaskDatabase {
     if (_database != null) return _database!;
     _database = await _initDB('tasks.db');
     return _database!;
-  }
-  Future<Database> _initDB(String filePath) async {
+  }  Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 2, // Incrementamos la versión para la migración
+      version: 3, // Incrementamos la versión para la migración
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
     );
-  }
-  Future _createDB(Database db, int version) async {
+  }  Future _createDB(Database db, int version) async {
     await db.execute('''
     CREATE TABLE tasks(
       id TEXT PRIMARY KEY,
@@ -32,11 +30,11 @@ class TaskDatabase {
       created_at TEXT NOT NULL,
       user_id TEXT,
       server_id TEXT,
-      needs_sync INTEGER NOT NULL DEFAULT 1
+      needs_sync INTEGER NOT NULL DEFAULT 1,
+      is_deleted INTEGER NOT NULL DEFAULT 0
     )
     ''');
   }
-
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       // Agregar las nuevas columnas para la versión 2
@@ -44,18 +42,22 @@ class TaskDatabase {
       await db.execute('ALTER TABLE tasks ADD COLUMN server_id TEXT');
       await db.execute('ALTER TABLE tasks ADD COLUMN needs_sync INTEGER NOT NULL DEFAULT 1');
     }
+    
+    if (oldVersion < 3) {
+      // Agregar columna is_deleted en versión 3
+      await db.execute('ALTER TABLE tasks ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0');
+    }
   }
 
   Future<Task> insertTask(Task task) async {
     final db = await database;
     await db.insert('tasks', task.toMap());
     return task;
-  }
-  Future<Task> getTask(String id) async {
+  }  Future<Task> getTask(String id) async {
     final db = await database;
     final maps = await db.query(
       'tasks',
-      columns: ['id', 'title', 'is_completed', 'created_at', 'user_id', 'server_id', 'needs_sync'],
+      columns: ['id', 'title', 'is_completed', 'created_at', 'user_id', 'server_id', 'needs_sync', 'is_deleted'],
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -70,22 +72,30 @@ class TaskDatabase {
     final db = await database;
     final result = await db.query('tasks');
     return result.map((map) => Task.fromMap(map)).toList();
-  }
-  Future<List<Task>> getTasksForUser(String userId) async {
+  }  Future<List<Task>> getTasksForUser(String userId) async {
     final db = await database;
     final result = await db.query(
       'tasks',
-      where: 'user_id = ?',
+      where: 'user_id = ? AND is_deleted = 0',
       whereArgs: [userId],
     );
     return result.map((map) => Task.fromMap(map)).toList();
   }
-
   Future<List<Task>> getTasksNeedingSync(String userId) async {
     final db = await database;
     final result = await db.query(
       'tasks',
       where: 'user_id = ? AND needs_sync = 1',
+      whereArgs: [userId],
+    );
+    return result.map((map) => Task.fromMap(map)).toList();
+  }
+  
+  Future<List<Task>> getDeletedTasksForSync(String userId) async {
+    final db = await database;
+    final result = await db.query(
+      'tasks',
+      where: 'user_id = ? AND is_deleted = 1 AND server_id IS NOT NULL',
       whereArgs: [userId],
     );
     return result.map((map) => Task.fromMap(map)).toList();
@@ -99,8 +109,31 @@ class TaskDatabase {
       where: 'id = ?',
       whereArgs: [task.id],
     );
+  }  Future<int> deleteTask(String id) async {
+    final db = await database;
+    // Verificar si la tarea tiene serverId (ya existe en el servidor)
+    final task = await getTask(id);
+    
+    // Si tiene serverId, marcarla como eliminada y pendiente de sincronización
+    if (task.serverId != null) {
+      return await db.update(
+        'tasks',
+        {'is_deleted': 1, 'needs_sync': 1},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    } else {
+      // Si no tiene serverId, se puede eliminar completamente
+      return await db.delete(
+        'tasks',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    }
   }
-  Future<int> deleteTask(String id) async {
+  
+  // Eliminar permanentemente una tarea después de sincronizar
+  Future<int> purgeDeletedTask(String id) async {
     final db = await database;
     return await db.delete(
       'tasks',

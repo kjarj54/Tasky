@@ -6,6 +6,7 @@ class Task {
   final String? userId; // Nueva propiedad para asociar con el usuario
   final String? serverId; // ID del servidor para sincronización
   final bool needsSync; // Indica si necesita sincronizarse
+  final bool isDeleted; // Indica si la tarea ha sido eliminada localmente
 
   Task({
     required this.id,
@@ -15,6 +16,7 @@ class Task {
     this.userId,
     this.serverId,
     this.needsSync = true,
+    this.isDeleted = false,
   }) : createdAt = createdAt ?? DateTime.now() {
     if (title.isEmpty) {
       throw ArgumentError('El título de la tarea no puede estar vacío');
@@ -22,8 +24,7 @@ class Task {
     if (id.isEmpty) {
       throw ArgumentError('El ID de la tarea no puede estar vacío');
     }
-  }
-  Task copyWith({
+  }  Task copyWith({
     String? id,
     String? title,
     bool? isCompleted,
@@ -31,6 +32,7 @@ class Task {
     String? userId,
     String? serverId,
     bool? needsSync,
+    bool? isDeleted,
   }) {
     return Task(
       id: id ?? this.id,
@@ -40,9 +42,9 @@ class Task {
       userId: userId ?? this.userId,
       serverId: serverId ?? this.serverId,
       needsSync: needsSync ?? this.needsSync,
+      isDeleted: isDeleted ?? this.isDeleted,
     );
-  }
-  // Convert Task to a Map for database operations
+  }  // Convert Task to a Map for database operations
   Map<String, dynamic> toMap() => {
     'id': id,
     'title': title,
@@ -51,8 +53,8 @@ class Task {
     'user_id': userId,
     'server_id': serverId,
     'needs_sync': needsSync ? 1 : 0,
+    'is_deleted': isDeleted ? 1 : 0,
   };
-
   // Create a Task from a database Map
   factory Task.fromMap(Map<String, dynamic> map) => Task(
     id: map['id'],
@@ -62,13 +64,14 @@ class Task {
     userId: map['user_id'],
     serverId: map['server_id'],
     needsSync: map['needs_sync'] == 1,
-  );
-  // Convert Task to JSON for API requests
+    isDeleted: map['is_deleted'] == 1,
+  );  // Convert Task to JSON for API requests
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{
       'title': title,
       'is_completed': isCompleted,
       'created_at': createdAt.toIso8601String(),
+      'is_deleted': isDeleted,
     };
     
     // Only include ID if we have a valid serverId (integer from backend)
@@ -94,6 +97,7 @@ class Task {
     userId: userId,
     serverId: json['id']?.toString(),
     needsSync: false, // Viene del servidor, no necesita sync
+    isDeleted: json['is_deleted'] ?? false,
   );
 
   @override
